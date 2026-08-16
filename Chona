@@ -1,0 +1,220 @@
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+
+-- Создание GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Parent = game.CoreGui
+
+-- Кнопка открытия меню (по середине сверху)
+local MenuButton = Instance.new("TextButton")
+MenuButton.Size = UDim2.new(0, 50, 0, 30)
+MenuButton.Position = UDim2.new(0.5, -25, 0, 5)
+MenuButton.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+MenuButton.Text = "☰"
+MenuButton.TextColor3 = Color3.new(1, 1, 1)
+MenuButton.Font = Enum.Font.SourceSansBold
+MenuButton.TextSize = 20
+MenuButton.Parent = ScreenGui
+Instance.new("UICorner", MenuButton).CornerRadius = UDim.new(1, 0)
+
+-- Перетаскивание кнопки меню
+local draggingMenu = false
+local dragInput = nil
+local dragStart = nil
+local startPos = nil
+
+MenuButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        draggingMenu = true
+        dragStart = input.Position
+        startPos = MenuButton.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                draggingMenu = false
+            end
+        end)
+    end
+end)
+
+MenuButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if draggingMenu and dragInput then
+        local delta = dragInput.Position - dragStart
+        MenuButton.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Основное окно
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 300, 0, 250)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -125)
+MainFrame.BackgroundColor3 = Color3.new(0, 0, 0)
+MainFrame.BackgroundTransparency = 0.2
+MainFrame.Visible = false
+MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
+
+-- Кнопка закрытия X
+local CloseButton = Instance.new("TextButton")
+CloseButton.Size = UDim2.new(0, 25, 0, 25)
+CloseButton.Position = UDim2.new(1, -30, 0, 5)
+CloseButton.BackgroundColor3 = Color3.new(0.3, 0.3, 0.3)
+CloseButton.Text = "X"
+CloseButton.TextColor3 = Color3.new(1, 1, 1)
+CloseButton.Font = Enum.Font.SourceSansBold
+CloseButton.TextSize = 16
+CloseButton.Parent = MainFrame
+Instance.new("UICorner", CloseButton).CornerRadius = UDim.new(0, 6)
+
+-- Кнопка ESP
+local ESPButton = Instance.new("TextButton")
+ESPButton.Size = UDim2.new(0, 100, 0, 40)
+ESPButton.Position = UDim2.new(0.5, -50, 0, 50)
+ESPButton.BackgroundColor3 = Color3.new(0.15, 0.15, 0.15)
+ESPButton.Text = "ESP"
+ESPButton.TextColor3 = Color3.new(1, 0, 0)
+ESPButton.Font = Enum.Font.SourceSansBold
+ESPButton.TextSize = 24
+ESPButton.Parent = MainFrame
+Instance.new("UICorner", ESPButton).CornerRadius = UDim.new(0, 8)
+
+-- Переменные ESP
+local espEnabled = false
+local espConnections = {}
+
+-- Функция создания ESP для игрока
+local function createESP(player)
+    local character = player.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChild("Humanoid")
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not rootPart then return end
+    
+    -- Обводка (Highlight)
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "ESP_Highlight"
+    highlight.FillTransparency = 1
+    highlight.OutlineColor = Color3.new(1, 1, 1)
+    highlight.OutlineWidth = 2
+    highlight.Parent = character
+    
+    -- Текст над игроком
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP_Billboard"
+    billboard.Size = UDim2.new(0, 200, 0, 30)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Parent = character
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.TextColor3 = Color3.new(1, 1, 1)
+    textLabel.TextStrokeTransparency = 0
+    textLabel.Font = Enum.Font.SourceSansBold
+    textLabel.TextSize = 16
+    textLabel.Parent = billboard
+    
+    local function updateESP()
+        if not character or not character.Parent or not humanoid or not humanoid.Parent or not rootPart or not rootPart.Parent then
+            return
+        end
+        
+        local distance = (rootPart.Position - LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+        local health = math.floor(humanoid.Health)
+        textLabel.Text = player.Name .. " • " .. health .. " HP • " .. math.floor(distance) .. "m"
+    end
+    
+    local connection = RunService.RenderStepped:Connect(updateESP)
+    table.insert(espConnections, connection)
+    
+    -- Автоматическое удаление при смерти/возрождении
+    local function onCharacterAdded(newCharacter)
+        if espEnabled then
+            task.wait(0.5)
+            createESP(player)
+        end
+    end
+    
+    player.CharacterAdded:Connect(onCharacterAdded)
+end
+
+-- Функция удаления ESP
+local function removeESP(player)
+    local character = player.Character
+    if not character then return end
+    
+    local highlight = character:FindFirstChild("ESP_Highlight")
+    if highlight then highlight:Destroy() end
+    
+    local billboard = character:FindFirstChild("ESP_Billboard")
+    if billboard then billboard:Destroy() end
+end
+
+-- Функция обновления всех ESP
+local function updateAllESP()
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            if espEnabled then
+                createESP(player)
+            else
+                removeESP(player)
+            end
+        end
+    end
+end
+
+-- Обработчики событий
+MenuButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+CloseButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+end)
+
+ESPButton.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+    if espEnabled then
+        ESPButton.TextColor3 = Color3.new(0, 1, 0)
+    else
+        ESPButton.TextColor3 = Color3.new(1, 0, 0)
+        -- Очистка соединений
+        for _, conn in pairs(espConnections) do
+            conn:Disconnect()
+        end
+        espConnections = {}
+    end
+    updateAllESP()
+end)
+
+-- Обработчики игроков
+Players.PlayerAdded:Connect(function(player)
+    if espEnabled and player ~= LocalPlayer then
+        player.CharacterAdded:Wait()
+        createESP(player)
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    removeESP(player)
+end)
+
+-- Инициализация существующих игроков
+for _, player in pairs(Players:GetPlayers()) do
+    if player ~= LocalPlayer then
+        player.CharacterAdded:Connect(function()
+            if espEnabled then
+                createESP(player)
+            end
+        end)
+    end
+end
